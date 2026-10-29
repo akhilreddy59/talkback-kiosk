@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101b1d">
+  <title>TalkBack — Local chat</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script type="module" src="/static/app.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <aside class="side-panel" aria-label="TalkBack information">
+      <a class="brand" href="/" aria-label="TalkBack home">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>talkback<span class="brand-period">.</span></span>
+      </a>
+
+      <div class="side-copy">
+        <p class="eyebrow">YOUR LOCAL ASSISTANT</p>
+        <h1>A little more<br>conversation.</h1>
+        <p class="muted">A private space to think out loud. Your message goes to Ollama on this computer.</p>
+      </div>
+
+      <section class="local-card" aria-labelledby="local-title">
+        <div class="local-heading"><span class="local-icon" aria-hidden="true">⌂</span><h2 id="local-title">On this device</h2></div>
+        <p>TalkBack sends chat only to the local Ollama service. No cloud AI is connected.</p>
+        <div class="connection-line"><span class="status-dot" id="connection-dot"></span><span id="connection-label">Checking Ollama…</span></div>
+      </section>
+
+      <div class="side-footer"><span class="tiny-spark" aria-hidden="true">✳</span> A quieter kind of AI</div>
+    </aside>
+
+    <section class="chat-panel" aria-label="Conversation">
+      <header class="topbar">
+        <div><p class="eyebrow">TALKBACK / LOCAL STATION</p><h2>Conversation</h2></div>
+        <div class="select-group">
+          <div class="model-control">
+            <label for="model-select">MODEL</label>
+            <select id="model-select" aria-describedby="model-help" disabled><option>Loading models…</option></select>
+            <span id="model-help" class="sr-only">Choose an installed Ollama model.</span>
+          </div>
+          <div class="language-control">
+            <label for="language-select">LANGUAGE</label>
+            <select id="language-select" aria-label="Response language">
+              <option value="en">English</option>
+              <option value="hi">हिन्दी</option>
+              <option value="te">తెలుగు</option>
+            </select>
+          </div>
+        </div>
+      </header>
+
+      <div class="thread" id="thread" aria-live="polite" aria-relevant="additions text">
+        <div class="welcome" id="welcome">
+          <div class="welcome-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <p class="eyebrow">READY WHEN YOU ARE</p>
+          <h3>What’s on your mind?</h3>
+          <p>Your first message stays on this computer.</p>
+          <button class="suggestion" type="button" data-prompt="Give me one small idea for making today a little better.">Give me one small idea for today <span aria-hidden="true">↗</span></button>
+        </div>
+      </div>
+
+      <div class="composer-wrap">
+        <p class="status-line" id="request-status" role="status">Messages are processed locally.</p>
+        <form id="chat-form" class="composer" novalidate>
+          <label class="sr-only" for="message-input">Your message</label>
+          <textarea id="message-input" rows="1" maxlength="8000" placeholder="Write a message…" required></textarea>
+          <button class="stop-button" id="stop-button" type="button" hidden>Stop</button>
+          <button class="send-button" id="send-button" type="submit" aria-label="Send message" disabled><span aria-hidden="true">↑</span></button>
+        </form>
+        <div class="composer-meta"><span>ENTER to send <i>·</i> SHIFT + ENTER for a new line</span><span>LOCAL ONLY <span class="privacy-mark" aria-hidden="true">●</span></span></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
+
