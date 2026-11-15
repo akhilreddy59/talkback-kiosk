@@ -11,7 +11,19 @@ const statusLine = document.querySelector('#request-status');
 const connectionLabel = document.querySelector('#connection-label');
 const connectionDot = document.querySelector('#connection-dot');
 const welcome = document.querySelector('#welcome');
+const voiceStart = document.querySelector('#voice-start');
+const voiceEnd = document.querySelector('#voice-end');
+const voiceMute = document.querySelector('#voice-mute');
+const voiceStatus = document.querySelector('#voice-status');
+const voiceIndicator = document.querySelector('#voice-indicator');
 let activeController = null;
+let recognition = null;
+let voiceConversationActive = false;
+let voiceProcessing = false;
+let assistantMuted = false;
+let speechUtterance = null;
+
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 function setStatus(message, isError = false) {
   statusLine.textContent = message;
@@ -48,11 +60,155 @@ function addMeta(article, text, warning = false) {
 }
 
 function updateSendState() {
-  const busy = activeController !== null;
+  const busy = activeController !== null || speechUtterance !== null;
   sendButton.disabled = busy || !input.value.trim() || !modelSelect.value;
   sendButton.hidden = busy;
   stopButton.hidden = !busy;
+  updateVoiceControls();
 }
+
+function setVoiceStatus(message, state = 'paused') {
+  voiceStatus.textContent = message;
+  voiceStatus.dataset.state = state;
+  voiceIndicator.dataset.state = state;
+}
+
+function updateVoiceControls() {
+  voiceStart.disabled = !SpeechRecognition || voiceConversationActive
+    || activeController !== null || speechUtterance !== null;
+  voiceEnd.disabled = !voiceConversationActive;
+  voiceMute.disabled = !voiceConversationActive;
+  voiceMute.textContent = assistantMuted ? 'Unmute assistant' : 'Mute assistant';
+  voiceMute.setAttribute('aria-pressed', String(assistantMuted));
+}
+
+function stopSpeech() {
+  window.speechSynthesis.cancel();
+  speechUtterance = null;
+}
+
+function stopRecognition() {
+  if (!recognition) return;
+  recognition.onend = null;
+  try {
+    recognition.stop();
+  } catch (error) {
+    if (error.name !== 'InvalidStateError') throw error;
+  }
+  recognition = null;
+}
+
+function finishVoiceConversation() {
+  voiceConversationActive = false;
+  voiceProcessing = false;
+  stopRecognition();
+  stopSpeech();
+  setVoiceStatus('Paused');
+  updateVoiceControls();
+}
+
+function listenForVoiceMessage() {
+  if (!voiceConversationActive || voiceProcessing || !recognition) return;
+  setVoiceStatus('Listening', 'listening');
+  try {
+    recognition.start();
+  } catch (error) {
+    if (error.name !== 'InvalidStateError') {
+      finishVoiceConversation();
+      setStatus('Could not start the microphone. Check browser permissions and try again.', true);
+    }
+  }
+}
+
+function speakAssistantResponse(text) {
+  if (!voiceConversationActive || assistantMuted || !text.trim()) {
+    listenForVoiceMessage();
+    return;
+  }
+  setVoiceStatus('Speaking', 'speaking');
+  speechUtterance = new SpeechSynthesisUtterance(text);
+  speechUtterance.lang = languageSelect.value === 'hi' ? 'hi-IN'
+    : languageSelect.value === 'te' ? 'te-IN' : 'en-US';
+  speechUtterance.onend = () => {
+    speechUtterance = null;
+    updateSendState();
+    listenForVoiceMessage();
+  };
+  speechUtterance.onerror = () => {
+    speechUtterance = null;
+    updateSendState();
+    if (voiceConversationActive) {
+      setStatus('Assistant speech could not be played. Continuing in listening mode.', true);
+      listenForVoiceMessage();
+    }
+  };
+  window.speechSynthesis.speak(speechUtterance);
+  updateSendState();
+}
+
+function startVoiceConversation() {
+  if (!SpeechRecognition) {
+    setStatus('Voice input is not supported in this browser. Typed chat is still available.', true);
+    return;
+  }
+  if (activeController || speechUtterance) return;
+  voiceConversationActive = true;
+  voiceProcessing = false;
+  recognition = new SpeechRecognition();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.lang = 'en-US';
+  recognition.onresult = (event) => {
+    if (!voiceConversationActive || voiceProcessing) return;
+    const transcript = Array.from(event.results)
+      .slice(event.resultIndex)
+      .map((result) => result[0]?.transcript || '')
+      .join(' ')
+      .trim();
+    if (!transcript) {
+      setStatus('I did not catch that. Listening again.');
+      return;
+    }
+    voiceProcessing = true;
+    stopRecognition();
+    submitMessage(transcript, { fromVoice: true });
+  };
+  recognition.onerror = (event) => {
+    if (!voiceConversationActive) return;
+    voiceProcessing = false;
+    const message = event.error === 'not-allowed'
+      ? 'Microphone permission was denied. Allow microphone access to use voice conversation.'
+      : event.error === 'no-speech'
+        ? 'No speech detected. Listening again.'
+        : 'Voice recognition encountered an error. Listening again.';
+    setStatus(message, event.error !== 'no-speech');
+    if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+      finishVoiceConversation();
+      return;
+    }
+  };
+  recognition.onend = () => {
+    if (voiceConversationActive && !voiceProcessing) listenForVoiceMessage();
+  };
+  updateVoiceControls();
+  setStatus('Choose Allow when Chrome asks for microphone access.');
+  listenForVoiceMessage();
+}
+
+voiceStart.addEventListener('click', startVoiceConversation);
+voiceEnd.addEventListener('click', finishVoiceConversation);
+voiceMute.addEventListener('click', () => {
+  assistantMuted = !assistantMuted;
+  if (assistantMuted && speechUtterance) {
+    stopSpeech();
+    updateSendState();
+    if (voiceConversationActive) listenForVoiceMessage();
+  }
+  updateVoiceControls();
+  if (voiceConversationActive && assistantMuted && voiceProcessing) {
+    setStatus('Assistant speech muted. Waiting for the current response to finish.');
+  }
+});
 
 function formatMetrics(metrics, model) {
   const parts = [model];
@@ -117,14 +273,23 @@ document.querySelectorAll('[data-prompt]').forEach((button) => button.addEventLi
   input.dispatchEvent(new Event('input'));
   input.focus();
 }));
-stopButton.addEventListener('click', () => activeController?.abort());
+stopButton.addEventListener('click', () => {
+  if (activeController) {
+    activeController.abort();
+    return;
+  }
+  if (speechUtterance) {
+    stopSpeech();
+    setStatus('Assistant speech stopped.');
+    if (voiceConversationActive) listenForVoiceMessage();
+    updateSendState();
+  }
+});
 
-form.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  const message = input.value.trim();
+async function submitMessage(message, { fromVoice = false } = {}) {
   const model = modelSelect.value;
   const language = languageSelect.value;
-  if (!message || !model || activeController) return;
+  if (!message || !model || activeController) return '';
 
   addMessage('user', message);
   input.value = '';
@@ -134,8 +299,9 @@ form.addEventListener('submit', async (event) => {
   const controller = new AbortController();
   activeController = controller;
   updateSendState();
-  setStatus('Waiting for the first words…');
+  setStatus(fromVoice ? 'Processing your voice message…' : 'Waiting for the first words…');
   let receivedText = false;
+  let assistantText = '';
 
   try {
     const response = await fetch('/api/chat', {
@@ -158,11 +324,13 @@ form.addEventListener('submit', async (event) => {
     setStatus('TalkBack is replying…');
     const finalEvent = await readChatStream(response, (chunk) => {
       body.textContent = (receivedText ? body.textContent : '') + chunk;
+      assistantText += chunk;
       receivedText = true;
       thread.scrollTop = thread.scrollHeight;
     });
     addMeta(article, formatMetrics(finalEvent.metrics, finalEvent.model || model));
     setStatus('Reply received from your local model.');
+    return assistantText;
   } catch (error) {
     if (error.name === 'AbortError') {
       if (!receivedText) body.textContent = 'Response stopped before any text arrived.';
@@ -183,12 +351,33 @@ form.addEventListener('submit', async (event) => {
         setStatus('Your message could not be answered. You can edit it and try again.', true);
       }
     }
+    return '';
   } finally {
     if (activeController === controller) activeController = null;
     updateSendState();
     input.focus();
+    if (fromVoice || voiceConversationActive) {
+      voiceProcessing = false;
+      if (voiceConversationActive) speakAssistantResponse(assistantText);
+    }
   }
+}
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const message = input.value.trim();
+  if (!message || activeController) return;
+  if (voiceConversationActive) {
+    stopRecognition();
+    voiceProcessing = false;
+  }
+  await submitMessage(message);
 });
 
 loadModels();
-
+if (!SpeechRecognition) {
+  setVoiceStatus('Unavailable in this browser');
+  voiceStart.disabled = true;
+} else {
+  updateVoiceControls();
+}

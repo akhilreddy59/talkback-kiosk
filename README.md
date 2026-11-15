@@ -1,6 +1,6 @@
 # TalkBack
 
-TalkBack is a local text-chat kiosk prototype. The browser talks to a small FastAPI server on this computer, and that server sends messages to your local Ollama service. There are no cloud AI calls, speech features, camera features, or conversation logs in this milestone.
+TalkBack is a local-first text and voice-chat kiosk prototype. The browser talks to a small FastAPI server on this computer, and that server sends messages to your local Ollama service. Chat inference stays local; browser speech recognition may use an internet-based browser service. TalkBack does not save audio or conversation logs.
 
 ## Requirements
 
@@ -40,9 +40,10 @@ Dependencies are installed in `.venv`; no system-wide Python packages are change
 
 3. Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser.
 4. Choose `qwen2.5-coder:7b` and a reply language (English, Hindi, or Telugu), type a message, and press Enter or select the arrow button. Shift+Enter inserts a new line.
-5. TalkBack shows text as Ollama generates it. Select **Stop** to cancel generation; any partial answer stays visible.
-6. The finished answer shows duration and the Ollama load, token, and generation-rate metrics when Ollama provides them.
-7. To stop TalkBack, focus the PowerShell window and press Ctrl+C.
+5. To try voice, select **Start conversation** and allow microphone access when Chrome asks. Speak in English; TalkBack adds the recognized transcript to the normal chat, streams the Ollama reply, speaks it with the browser, and listens for the next message after speech finishes.
+6. Select **Mute assistant** to continue listening without spoken replies, or **End conversation** to stop recognition and speech. **Stop** cancels generation or an ongoing spoken reply.
+7. TalkBack shows text as Ollama generates it. The finished answer shows duration and Ollama metrics when available.
+8. To stop TalkBack, focus the PowerShell window and press Ctrl+C.
 
 ## Test the running application from PowerShell
 
@@ -106,10 +107,9 @@ Python tests use a fake Ollama client and check the health/model endpoints, chat
 - Browser to TalkBack: `127.0.0.1:8000` (same computer only).
 - TalkBack to Ollama: `127.0.0.1:11434` (same computer only).
 - TalkBack sends the selected model, language instruction, message text, and output-token limit to Ollama.
-- TalkBack does not save messages, recordings, or images. This milestone has no recording or image features.
+- TalkBack does not save messages, audio recordings, or images. Speech recognition is browser-provided and may send audio to the browser vendor's recognition service; the app does not claim the entire voice pipeline is offline.
 - The model selector is populated from Ollama's installed-model list; TalkBack does not download models.
 
 ## Current scope
 
-This prototype implements text chat, model selection, an Ollama health indicator, and useful request errors. Hindi/Telugu prompting, speech recognition, text-to-speech, camera, face recognition, diagnostics, and Raspberry Pi deployment remain later milestones.
-
+This prototype implements text chat, model selection, an Ollama health indicator, voice conversation with browser speech recognition and speech synthesis, and useful request errors. Camera, face recognition, diagnostics, and Raspberry Pi deployment remain later milestones.

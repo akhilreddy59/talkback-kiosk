@@ -63,6 +63,21 @@
 
       <div class="composer-wrap">
         <p class="status-line" id="request-status" role="status">Messages are processed locally.</p>
+        <section class="voice-controls" aria-labelledby="voice-title">
+          <div class="voice-heading">
+            <div>
+              <p class="eyebrow" id="voice-title">VOICE CONVERSATION</p>
+              <p class="voice-note">English voice input · browser recognition may use an internet-based browser service.</p>
+            </div>
+            <span class="voice-indicator" id="voice-indicator" aria-hidden="true"></span>
+          </div>
+          <div class="voice-actions">
+            <button class="voice-button primary" id="voice-start" type="button">Start conversation</button>
+            <button class="voice-button" id="voice-end" type="button" disabled>End conversation</button>
+            <button class="voice-button" id="voice-mute" type="button" disabled aria-pressed="false">Mute assistant</button>
+            <span class="voice-status" id="voice-status" role="status">Paused</span>
+          </div>
+        </section>
         <form id="chat-form" class="composer" novalidate>
           <label class="sr-only" for="message-input">Your message</label>
           <textarea id="message-input" rows="1" maxlength="8000" placeholder="Write a message…" required></textarea>
@@ -75,4 +90,3 @@
   </main>
 </body>
 </html>
-
