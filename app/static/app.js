@@ -22,6 +22,7 @@ let voiceConversationActive = false;
 let voiceProcessing = false;
 let assistantMuted = false;
 let speechUtterance = null;
+let speechObjectUrl = null;
 
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -83,29 +84,49 @@ function updateVoiceControls() {
 }
 
 function stopSpeech() {
+  if (speechUtterance && speechUtterance.tagName === "AUDIO") {
+    speechUtterance.pause();
+    speechUtterance.removeAttribute("src");
+    speechUtterance.load();
+  }
+
+  if (speechObjectUrl) {
+    URL.revokeObjectURL(speechObjectUrl);
+    speechObjectUrl = null;
+  }
+
   window.speechSynthesis.cancel();
   speechUtterance = null;
 }
 
+
 function stopRecognition() {
   if (!recognition) return;
-  recognition.onend = null;
+
   try {
     recognition.stop();
   } catch (error) {
     if (error.name !== 'InvalidStateError') throw error;
   }
-  recognition = null;
 }
+
+
 
 function finishVoiceConversation() {
   voiceConversationActive = false;
   voiceProcessing = false;
-  stopRecognition();
+
+  if (recognition) {
+    recognition.onend = null;
+    stopRecognition();
+    recognition = null;
+  }
+
   stopSpeech();
   setVoiceStatus('Paused');
   updateVoiceControls();
 }
+
 
 function listenForVoiceMessage() {
   if (!voiceConversationActive || voiceProcessing || !recognition) return;
@@ -120,30 +141,102 @@ function listenForVoiceMessage() {
   }
 }
 
-function speakAssistantResponse(text) {
+async function speakAssistantResponse(text) {
   if (!voiceConversationActive || assistantMuted || !text.trim()) {
     listenForVoiceMessage();
     return;
   }
-  setVoiceStatus('Speaking', 'speaking');
-  speechUtterance = new SpeechSynthesisUtterance(text);
-  speechUtterance.lang = languageSelect.value === 'hi' ? 'hi-IN'
-    : languageSelect.value === 'te' ? 'te-IN' : 'en-US';
-  speechUtterance.onend = () => {
-    speechUtterance = null;
+
+  setVoiceStatus("Generating offline speech...", "speaking");
+
+  const audio = new Audio();
+  speechUtterance = audio;
+  updateSendState();
+
+  try {
+    const response = await fetch("/api/speech", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        text: text,
+        language: languageSelect.value
+      })
+    });
+
+    if (!response.ok) {
+      let detail = "Offline speech failed.";
+      try {
+        detail = (await response.json()).detail || detail;
+      } catch {}
+      throw new Error(detail);
+    }
+
+    const blob = await response.blob();
+
+    if (
+      speechUtterance !== audio ||
+      !voiceConversationActive ||
+      assistantMuted
+    ) {
+      return;
+    }
+
+    speechObjectUrl = URL.createObjectURL(blob);
+    audio.src = speechObjectUrl;
+
+    audio.onended = () => {
+      if (speechObjectUrl) {
+        URL.revokeObjectURL(speechObjectUrl);
+        speechObjectUrl = null;
+      }
+
+      if (speechUtterance === audio) {
+        speechUtterance = null;
+      }
+
+      updateSendState();
+      listenForVoiceMessage();
+    };
+
+    audio.onerror = () => {
+      if (speechObjectUrl) {
+        URL.revokeObjectURL(speechObjectUrl);
+        speechObjectUrl = null;
+      }
+
+      if (speechUtterance === audio) {
+        speechUtterance = null;
+      }
+
+      updateSendState();
+
+      if (voiceConversationActive) {
+        setStatus("Offline audio could not be played.", true);
+        listenForVoiceMessage();
+      }
+    };
+
+    await audio.play();
+
+  } catch (error) {
+    if (speechUtterance === audio) {
+      speechUtterance = null;
+    }
+
+    if (speechObjectUrl) {
+      URL.revokeObjectURL(speechObjectUrl);
+      speechObjectUrl = null;
+    }
+
     updateSendState();
-    listenForVoiceMessage();
-  };
-  speechUtterance.onerror = () => {
-    speechUtterance = null;
-    updateSendState();
+
     if (voiceConversationActive) {
-      setStatus('Assistant speech could not be played. Continuing in listening mode.', true);
+      setStatus(error.message || "Offline speech failed.", true);
       listenForVoiceMessage();
     }
-  };
-  window.speechSynthesis.speak(speechUtterance);
-  updateSendState();
+  }
 }
 
 function startVoiceConversation() {

@@ -4,10 +4,11 @@ from contextlib import asynccontextmanager
 import json
 from pathlib import Path
 import time
+import httpx
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -22,6 +23,9 @@ class ChatRequest(BaseModel):
     model: str = Field(min_length=1, max_length=200)
     language: Literal["en", "hi", "te"] = "en"
 
+class SpeechRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=8000)
+    language: Literal["en", "hi", "te"] = "en"
 
 def _ndjson(event: dict) -> str:
     return json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n"
@@ -47,6 +51,45 @@ def create_app(client: OllamaClient | None = None) -> FastAPI:
     @app.get("/")
     async def home():
         return FileResponse(STATIC_DIR / "index.html")
+    
+    @app.post("/api/speech")
+    async def speech(payload: SpeechRequest):
+        try:
+            async with httpx.AsyncClient(timeout=120.0) as voice_client:
+                voice_response = await voice_client.post(
+                    "http://127.0.0.1:7477/speak",
+                    json=payload.dict(),
+                )
+        except httpx.TimeoutException as exc:
+            raise HTTPException(
+                status_code=504,
+                detail="Offline voice generation timed out.",
+            ) from exc
+        except httpx.RequestError as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Piper is not running on port 7477.",
+            ) from exc
+
+        if not voice_response.is_success:
+            try:
+                detail = voice_response.json().get(
+                    "detail", "Speech generation failed."
+                )
+            except (ValueError, AttributeError):
+                detail = "Speech generation failed."
+
+            status_code = voice_response.status_code
+            if status_code >= 500:
+                status_code = 502
+
+            raise HTTPException(status_code=status_code, detail=detail)
+
+        return Response(
+            content=voice_response.content,
+            media_type="audio/wav",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.get("/api/health")
     async def health(request: Request):
